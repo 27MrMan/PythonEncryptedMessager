@@ -7,6 +7,8 @@ from Crypto.Cipher import AES
 import string, secrets
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
+import base64
+
 
 # Encrypt
 def rsa_encrypt(plaintext, public_key):
@@ -24,13 +26,21 @@ def rsa_decrypt(ciphertext, private_key):
 spec_key = 'Ÿ'
 
 #AES stuff
+#iteration 1 in client code
 def encrypt_AES_GCM(msg, secretKey):
     aesCipher = AES.new(secretKey, AES.MODE_GCM)
-    ciphertext, authTag = aesCipher.encrypt_and_digest(msg)
-    return (ciphertext, aesCipher.nonce, authTag)
+    ciphertext, authTag = aesCipher.encrypt_and_digest(msg.encode())
+    blob = aesCipher.nonce + ciphertext + authTag
+    return base64.b64encode(blob).decode('utf-8')
+    #return (ciphertext, aesCipher.nonce, authTag)
 
 def decrypt_AES_GCM(encryptedMsg, secretKey):
-    (ciphertext, nonce, authTag) = encryptedMsg
+    #encryptedMsg = base64.b64encode(encryptedMsg)
+    encryptedMsg = base64.b64decode(encryptedMsg.encode())
+    nonce = encryptedMsg[:16]
+    ciphertext = encryptedMsg[16:-16]
+    authTag = encryptedMsg[-16:]
+
     aesCipher = AES.new(secretKey, AES.MODE_GCM, nonce)
     plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
     return plaintext
@@ -46,30 +56,37 @@ sock.bind((IP, PORT))
 print(f"Listening for clients at {(IP, PORT)}")
 
 
-users_dict = {}
+user_keyList = {}
 decode_data = None
 
 while True:
     data, address = sock.recvfrom(4096)
     decode_data = data.decode(errors='ignore')
     cleaned_data = decode_data.replace('Ÿ', '')
+    print(data, decode_data, cleaned_data, sep='\n')
 
-    if address not in users_dict:
-        users_dict[address] = []
+    if address not in user_keyList.keys():
+        user_keyList[address] = ""
     
     match decode_data.count("Ÿ"):
         case 1: 
             charset = string.ascii_letters + string.digits + string.punctuation
-            temp_skey = secrets.token_urlsafe(32)
+            temp_skey = secrets.token_urlsafe(32)[:32]
             #temp_skey = os.urandom(32)
 
             #DEBUG
             print(temp_skey)
 
-            users_dict[address] = users_dict[address].append(temp_skey)
+            user_keyList[address] = temp_skey
             temp_ekey = rsa_encrypt(temp_skey, RSA.import_key(cleaned_data))
             
             sock.sendto(temp_ekey, address)
+
+        case 2:
+            temp_msg = decrypt_AES_GCM(cleaned_data, user_keyList[address].encode())
+            print(temp_msg)
+
+    print(user_keyList)
 
 
 

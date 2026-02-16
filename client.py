@@ -8,6 +8,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
+import base64
 
 # Generate RSA keys
 key = RSA.generate(2048)
@@ -36,13 +37,39 @@ print("RSA - Encrypted:", ciphertext)
 print("RSA - Decrypted:", decrypted_message)'''
 
 #AES stuff
-def encrypt_AES_GCM(msg, secretKey):
+##iteration 1
+'''def encrypt_AES_GCM(msg, secretKey):
     aesCipher = AES.new(secretKey, AES.MODE_GCM)
     ciphertext, authTag = aesCipher.encrypt_and_digest(msg)
-    return (ciphertext, aesCipher.nonce, authTag)
+    blob = aesCipher.nonce + ciphertext + authTag
+    return base64.b64encode(blob).decode('utf-8')
+    #return (ciphertext, aesCipher.nonce, authTag)
 
 def decrypt_AES_GCM(encryptedMsg, secretKey):
-    (ciphertext, nonce, authTag) = encryptedMsg
+    nonce = encryptedMsg[:16]
+    ciphertext = encryptedMsg[16:-16]
+    authTag = encryptedMsg[-16:]
+
+    aesCipher = AES.new(secretKey, AES.MODE_GCM, nonce)
+    plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
+    return plaintext'''
+
+##iteration 2
+#AES stuff
+def encrypt_AES_GCM(msg, secretKey):
+    aesCipher = AES.new(secretKey, AES.MODE_GCM)
+    ciphertext, authTag = aesCipher.encrypt_and_digest(msg.encode())
+    blob = aesCipher.nonce + ciphertext + authTag
+    return base64.b64encode(blob).decode('utf-8')
+    #return (ciphertext, aesCipher.nonce, authTag)
+
+def decrypt_AES_GCM(encryptedMsg, secretKey):
+    #encryptedMsg = base64.b64encode(encryptedMsg)
+    encryptedMsg = base64.b64decode(encryptedMsg.encode())
+    nonce = encryptedMsg[:16]
+    ciphertext = encryptedMsg[16:-16]
+    authTag = encryptedMsg[-16:]
+
     aesCipher = AES.new(secretKey, AES.MODE_GCM, nonce)
     plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
     return plaintext
@@ -67,6 +94,7 @@ skey = rsa_decrypt(data1, pkey)
 
 #DEBUG
 print(skey)
+skey = skey.encode()
 
 
 localMessageBuffer = 512
@@ -83,8 +111,11 @@ def uid_hash(uid,psw):
 
 while True:
     message = input("Enter message: ")
-    sock.sendto(message.encode(errors='ignore'), (SERVER_IP, SERVER_PORT))
+    message = encrypt_AES_GCM(message, skey)
+    message = "ŸŸ"+message
+    sock.sendto(message.encode(), (SERVER_IP, SERVER_PORT))
 
     print("Awaiting reply...")
+
     data, address = sock.recvfrom(4096) 
-    print(f"Server echoed: {data.decode(errors='ignore')}")
+    print(f"Server echoed: {decrypt_AES_GCM(data, skey)}")
