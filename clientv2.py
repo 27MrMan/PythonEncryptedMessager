@@ -4,6 +4,9 @@ import hashlib
 import getpass
 import time
 
+#GUI OwO
+from nicegui import ui
+
 #RSA encryption ~w~
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES
@@ -107,29 +110,38 @@ def uid_hash(uid,psw):
     return hash_object.hexdigest()
 
 
-while True:
-    username = input("Enter your username: ")
-    password = getpass.getpass(prompt="Enter your password: ").strip()
+async def user_Authenticate():
+    while True:
+        username = input("Enter your username: ")
+        password = getpass.getpass(prompt="Enter your password: ").strip()
 
-    payload = "ŸŸŸ"+username+'|'+uid_hash(username, password)
-    sock.sendto(payload.encode(), (SERVER_IP, SERVER_PORT))
+        payload = "ŸŸŸ"+username+'|'+uid_hash(username, password)
+        sock.sendto(payload.encode(), (SERVER_IP, SERVER_PORT))
 
-    data2, address = sock.recvfrom(4096)
-    data2= data2.decode()
-    if data2 == "pass":
-        print("Login Accepted!\n")
-        break
-    else:
-        time.sleep(1)
-        print("Incorrect username or password, try again ")
+        data2, address = sock.recvfrom(4096)
+        data2= data2.decode()
+        if data2 == "pass":
+            print("Login Accepted!\n")
+            break
+        else:
+            time.sleep(1)
+            print("Incorrect username or password, try again ")
 
-while True:
-    message = input("Enter message: ")
-    message = encrypt_AES_GCM(message, skey)
-    message = "ŸŸ"+message
-    sock.sendto(message.encode(), (SERVER_IP, SERVER_PORT))
+async def send_Message():
+    while True:
+        message = input("Enter message: ")
+        message = encrypt_AES_GCM(message, skey)
+        message = "ŸŸ"+message
+        sock.sendto(message.encode(), (SERVER_IP, SERVER_PORT))
 
-    print("Awaiting reply...")
+        print("Awaiting reply...")
 
-    data, address = sock.recvfrom(4096) 
-    print(f"Server echoed: {decrypt_AES_GCM(data, skey)}")
+        data, address = sock.recvfrom(4096) 
+        print(f"Server echoed: {decrypt_AES_GCM(data, skey)}")
+
+
+@ui.page('/')
+def auth_page():
+    ui.label("Hiii :3 Welcome!").style('text-align: center; font-size: 300%; color: #7851A9').classes("w-full center")
+
+ui.run()
