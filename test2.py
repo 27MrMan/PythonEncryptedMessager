@@ -97,7 +97,7 @@ async def submit_auth():
     data2, address = sock.recvfrom(4096)
     data2= data2.decode()
     if data2 == "pass":
-        pass
+        ui.navigate.to('/main')
 
 async def submit_addr():
     global SERVER_IP
@@ -146,6 +146,17 @@ def auth_page():
             ui.button("Submit Address",
                       on_click=lambda:submit_addr()
             ).classes('w-3/4 mx-auto')
+
+@ui.refreshable
+def display_messages():
+    pass
+
+@ui.page('/main')
+async def main_page():
+    with ui.splitter(horizontal=True).classes("w-full") as splitter:
+        with splitter.before:
+            ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
+
 
 
 

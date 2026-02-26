@@ -98,8 +98,12 @@ async def addMsg():
 '''
 #asyncio.run(addMsg())
 
-while True:
-    data, address = sock.recvfrom(4096)
+async def handle_message(data, address):
+
+    global user_keyList, user_authorList
+    global conn, cursor
+    global IP, PORT, sock
+
     decode_data = data.decode(errors='ignore')
     cleaned_data = decode_data.replace('Ÿ', '')
     #print(data, decode_data, cleaned_data, sep='\n')
@@ -124,7 +128,7 @@ while True:
         case 2: #recieve message
             if address not in user_authorList.keys():
                 print("i smell a modified client","\nRico: Kaboom...?")
-                continue
+                return
 
             temp_msg = decrypt_AES_GCM(cleaned_data, user_keyList[address].encode())
             temp_msg = temp_msg.decode()
@@ -156,8 +160,8 @@ while True:
             if not(inputlist[0] in user_collection['userid'].tolist()):
                 sock.sendto("User not found".encode(), address)
                 print("goofy ahh user tried joinin' ")
-                continue
-
+                return
+            
             passhash_lookup = user_collection.loc[user_collection['userid'] == inputlist[0], 'password'].item()
             if inputlist[1] == passhash_lookup:
                 sock.sendto("pass".encode(), address)
@@ -166,19 +170,6 @@ while True:
                 user_authorList[address] = inputlist[0]
 
 
-    #DEBUG
-    #print(user_keyList)
-
-
-
-            
-
-'''    print(f"Received {data} from {address}")
-
-    if address not in address_list:
-        address_list.append(address)
-
-    message = input("Reply? ")
-
-    for i in address_list:
-        sock.sendto(message.encode(errors='ignore'), i)'''
+while True:
+    data, address = sock.recvfrom(4096)
+    asyncio.run(handle_message(data, address))
