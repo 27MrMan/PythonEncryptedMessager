@@ -146,7 +146,11 @@ async def handle_message(data, address):
             #msg_pipeline.append([cindex, cauthor, ccontent, ctime])
             #figure out asynchronous messages eventually
 
-            cursor.execute(f"INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES ({cindex}, '{cauthor}', '{ccontent}', '{ctime}')")
+            try:
+                cursor.execute("INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
+                              (cindex, cauthor, ccontent, ctime))
+            except Exception as e:
+                print("SQL PROBLEM!!",e)
             conn.commit()
 
             print("message recieved", cauthor)

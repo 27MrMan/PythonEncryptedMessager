@@ -79,7 +79,7 @@ user_input = ''
 pass_input = ''
 sip1,spt1 = '',''
 
-async def submit_auth():
+async def submit_auth(user_input, pass_input):
     global username
     global password
     global loadin
@@ -99,11 +99,10 @@ async def submit_auth():
     if data2 == "pass":
         ui.navigate.to('/main')
 
-async def submit_addr():
+async def submit_addr(spt1, sip1):
     global SERVER_IP
     global SERVER_PORT
-    global spt1
-    global sip1
+
 
     if not(spt1.value.strip() == '' and sip1.value.strip() == ''):
         SERVER_IP = spt1.value.strip()
@@ -115,8 +114,6 @@ async def submit_addr():
 def auth_page():
     global user_input
     global pass_input
-    global sip1
-    global spt1
     global loadin
     
     ui.label("Hiii :3 Welcome!").style('text-align: center; font-size: 300%; color: #7851A9').classes("w-full center")
@@ -130,10 +127,9 @@ def auth_page():
                             password_toggle_button= True,
                             placeholder = 'enter your password'
             ).classes('w-3/4 mx-auto')
-            user_input = uinput
-            pass_input = pinput
+
             ui.button('Submit',
-                    on_click=lambda: submit_auth()
+                    on_click=lambda: submit_auth(uinput, pinput)
             ).classes('w-3/4 mx-auto')
         with splitter.after:
             sip_input = ui.input(label = "Server IP",
@@ -142,9 +138,8 @@ def auth_page():
             spt_input = ui.input(label = "Server Port",
                                  placeholder="Also leave blank for default"
             ).classes('w-3/4 mx-auto')
-            sip1,spt1 = sip_input, spt_input
             ui.button("Submit Address",
-                      on_click=lambda:submit_addr()
+                      on_click=lambda:submit_addr(spt_input, sip_input)
             ).classes('w-3/4 mx-auto')
 
 @ui.refreshable
@@ -156,8 +151,6 @@ async def main_page():
     with ui.splitter(horizontal=True).classes("w-full") as splitter:
         with splitter.before:
             ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
-
-
 
 
 

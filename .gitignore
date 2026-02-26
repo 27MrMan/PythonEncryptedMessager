@@ -2,3 +2,4 @@ users.csv
 messages.csv
 messages.db
 test.py
+*.sqbpro
