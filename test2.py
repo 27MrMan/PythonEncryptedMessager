@@ -1,4 +1,4 @@
-from nicegui import ui
+from nicegui import ui, app
 import asyncio
 import socket
 import sys
@@ -75,6 +75,8 @@ def uid_hash(uid,psw):
 
 username, password = None, None
 loadin = False
+user_validated = False
+stop_tasks = False
 user_input = ''
 pass_input = ''
 sip1,spt1 = '',''
@@ -83,6 +85,7 @@ async def submit_auth(user_input, pass_input):
     global username
     global password
     global loadin
+    global user_validated
     
     username = user_input.value.strip()
     password = pass_input.value.strip()
@@ -97,6 +100,7 @@ async def submit_auth(user_input, pass_input):
     data2, address = sock.recvfrom(4096)
     data2= data2.decode()
     if data2 == "pass":
+        user_validated = True
         ui.navigate.to('/main')
 
 async def submit_addr(spt1, sip1):
@@ -108,6 +112,20 @@ async def submit_addr(spt1, sip1):
         SERVER_IP = spt1.value.strip()
         SERVER_PORT = spt1.value.strip()
 
+async def update_messages():
+    global user_validated
+    global stop_tasks
+    while True:
+        if stop_tasks:
+            break
+
+        print('debug')
+        if not user_validated:
+            await asyncio.sleep(5)
+            continue
+        await asyncio.sleep(1)
+        pass
+        #add to messages list, trim to length 256
 
 
 @ui.page('/')
@@ -155,15 +173,23 @@ async def main_page():
 
 
 async def debug1():
-    global user_input
-    try:
-        print(user_input.value)
-    except:
-        print("pass")
-        pass
-
-    await asyncio.sleep(1)
+    x=1
+    while x<500:
+        x+=1
+        print(x)
+        await asyncio.sleep(1)
 
 #asyncio.run(debug1())
+
+async def on_startup():
+    asyncio.create_task(update_messages())
+
+async def on_shutdown():
+    global stop_tasks
+    stop_tasks = True
+
+
+app.on_startup(on_startup)
+app.on_shutdown(on_shutdown)
 
 ui.run(dark = True)

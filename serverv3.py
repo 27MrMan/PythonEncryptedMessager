@@ -5,7 +5,8 @@ import datetime
 import asyncio
 
 #database for storing messages OwO
-import sqlite3
+#import sqlite3
+import aiosqlite
 
 #RSA encryption >///<
 from Crypto.PublicKey import RSA
@@ -15,19 +16,27 @@ from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
 import base64
 
-conn = sqlite3.connect('messages.db')
-cursor = conn.cursor()
+#conn = sqlite3.connect('messages.db')
+#cursor = conn.cursor()
 
-#SQlite code
-
-cursor.execute('''
+conn = None
+async def start_aiosqlite():
+    global conn
+    conn = await aiosqlite.connect('messages.db')
+    await conn.execute('''
     CREATE TABLE IF NOT EXISTS messages (
         FIND INTEGER PRIMARY KEY NOT NULL,
         AUTHOR TEXT NOT NULL,
         CONTENT TEXT NOT NULL,
         TIMESTAMP TEXT NOT NULL
     )
-''')
+    ''')
+    await conn.commit()
+
+
+#SQlite code
+
+
 
 
 
@@ -71,7 +80,7 @@ IP = "127.0.0.1"
 PORT = 2700
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind((IP, PORT))
+#sock.bind((IP, PORT))
 
 print(f"Listening for clients at {(IP, PORT)}")
 
@@ -97,12 +106,17 @@ async def addMsg():
             msg_pipeline = msg_pipeline [1:]
 '''
 #asyncio.run(addMsg())
+write_lock = asyncio.Lock()
 
-async def handle_message(data, address):
+async def handle_message(data, address, conn, transport):
+    # conn and transport are passed explicitly
+    print('test2')
+    usingcursor = False
 
+    # globals still in use for other state
     global user_keyList, user_authorList
-    global conn, cursor
-    global IP, PORT, sock
+    global IP, PORT
+
 
     decode_data = data.decode(errors='ignore')
     cleaned_data = decode_data.replace('Ÿ', '')
@@ -113,6 +127,7 @@ async def handle_message(data, address):
     
     match decode_data.count("Ÿ"):
         case 1: #get AES key
+            print('test3')
             charset = string.ascii_letters + string.digits + string.punctuation
             temp_skey = secrets.token_urlsafe(32)[:32]
             #temp_skey = os.urandom(32)
@@ -123,20 +138,23 @@ async def handle_message(data, address):
             user_keyList[address] = temp_skey
             temp_ekey = rsa_encrypt(temp_skey, RSA.import_key(cleaned_data))
             
-            sock.sendto(temp_ekey, address)
+            transport.sendto(temp_ekey, address)
 
         case 2: #recieve message
             if address not in user_authorList.keys():
                 print("i smell a modified client","\nRico: Kaboom...?")
                 return
 
+            cursor = await conn.cursor()
+            usingcursor = True
+
             temp_msg = decrypt_AES_GCM(cleaned_data, user_keyList[address].encode())
             temp_msg = temp_msg.decode()
 
 
             #structure: index, author, content, timestamp
-            indexfinder = cursor.execute(f"SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
-            cindex = cursor.fetchone()
+            indexfinder = await cursor.execute(f"SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
+            cindex = await cursor.fetchone()
             #For initilizing an empty database, i have to add some code later
             cindex = int(cindex[0]) +1
             cauthor = user_authorList[address]
@@ -147,11 +165,13 @@ async def handle_message(data, address):
             #figure out asynchronous messages eventually
 
             try:
-                cursor.execute("INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
-                              (cindex, cauthor, ccontent, ctime))
+                async with write_lock:
+                    await cursor.execute("INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
+                                (cindex, cauthor, ccontent, ctime))
+                    await conn.commit()
             except Exception as e:
                 print("SQL PROBLEM!!",e)
-            conn.commit()
+
 
             print("message recieved", cauthor)
 
@@ -162,18 +182,62 @@ async def handle_message(data, address):
             
 
             if not(inputlist[0] in user_collection['userid'].tolist()):
-                sock.sendto("User not found".encode(), address)
+                transport.sendto("User not found".encode(), address)
                 print("goofy ahh user tried joinin' ")
                 return
             
             passhash_lookup = user_collection.loc[user_collection['userid'] == inputlist[0], 'password'].item()
             if inputlist[1] == passhash_lookup:
-                sock.sendto("pass".encode(), address)
+                transport.sendto("pass".encode(), address)
                 
                 print(inputlist[0], 'has joined')
                 user_authorList[address] = inputlist[0]
 
+        case 4: #client request messages
+            pass
+    if usingcursor:
+        await cursor.close()
 
-while True:
-    data, address = sock.recvfrom(4096)
-    asyncio.run(handle_message(data, address))
+class UDP_Protocol(asyncio.DatagramProtocol):
+    def __init__(self, on_datagram, conn):
+        # on_datagram should be a coroutine accepting (data, address, conn, transport)
+        self.on_datagram = on_datagram
+        self.conn = conn
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, address):
+        """Called automatically when a UDP packet is received."""
+        message = data.decode()
+        print(f"Received {message!r} from {address}")
+        
+        # Run the callback asynchronously, passing the shared connection and transport
+        asyncio.create_task(self.on_datagram(data, address, self.conn, self.transport))
+
+async def main():
+    await start_aiosqlite()
+    loop = asyncio.get_running_loop()
+
+    # create a protocol instance that closes over the sqlite connection
+    transport, protocol = await loop.create_datagram_endpoint(
+        lambda: UDP_Protocol(handle_message, conn),
+        local_addr=('127.0.0.1', 2700)
+    )
+    print("New Server Running on 127.0.0.1:2700")
+
+    try:
+        #await asyncio.sleep(3600)
+        await asyncio.Future()
+    finally:
+        transport.close()
+
+    '''
+    while True:
+        print('test')
+        data, address = sock.recvfrom(4096)
+        asyncio.create_task(handle_message(data, address, conn1))
+
+        '''
+asyncio.run(main())
