@@ -55,6 +55,8 @@ SERVER_IP = 'yellow-custody.gl.at.ply.gg'
 #SERVER_PORT = 2700
 SERVER_PORT = 46163
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#sock.bind(('127.0.0.1', 27000))
+
 
 #obtaining the aes256 key#
 msg1 = "Ÿ"+pub_key_str
@@ -80,12 +82,27 @@ stop_tasks = False
 user_input = ''
 pass_input = ''
 sip1,spt1 = '',''
+running1= False
+
+class UDP_Protocol(asyncio.DatagramProtocol):
+    def __init__(self, on_datagram):
+        self.on_datagram = on_datagram
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, address):
+        asyncio.create_task(self.on_datagram(data, address, self.transport))
+
+messages = {} #message_index (find) : Message Tuple (find, etc, content, etc)
 
 async def submit_auth(user_input, pass_input):
     global username
     global password
     global loadin
     global user_validated
+    global running1
     
     username = user_input.value.strip()
     password = pass_input.value.strip()
@@ -102,6 +119,8 @@ async def submit_auth(user_input, pass_input):
     if data2 == "pass":
         user_validated = True
         ui.navigate.to('/main')
+        sock.close()
+        running1= True
 
 async def submit_addr(spt1, sip1):
     global SERVER_IP
@@ -112,20 +131,13 @@ async def submit_addr(spt1, sip1):
         SERVER_IP = spt1.value.strip()
         SERVER_PORT = spt1.value.strip()
 
-async def update_messages():
-    global user_validated
-    global stop_tasks
-    while True:
-        if stop_tasks:
-            break
+async def update_messages(data, address, transport):    
+    global messages
 
-        print('debug')
-        if not user_validated:
-            await asyncio.sleep(5)
-            continue
-        await asyncio.sleep(1)
-        pass
-        #add to messages list, trim to length 256
+    decode_data = data.decode(errors='ignore')
+    cleaned_data = decode_data.replace('Ÿ', '')
+
+    
 
 
 @ui.page('/')
@@ -161,7 +173,7 @@ def auth_page():
             ).classes('w-3/4 mx-auto')
 
 @ui.refreshable
-def display_messages():
+def display_messages(current_username: str):
     pass
 
 @ui.page('/main')
@@ -179,10 +191,28 @@ async def debug1():
         print(x)
         await asyncio.sleep(1)
 
+async def UDP_Reciever():
+    loop = asyncio.get_running_loop()
+
+    while not running1:
+        await asyncio.sleep(1)
+
+    transport, protocol = await loop.create_datagram_endpoint(
+        lambda: UDP_Protocol(update_messages),local_addr = ('127.0.0.1','27000'))
+
+
+    print("Reciever up")
+    try: 
+        await asyncio.Future()
+    finally:
+        transport.close()
+
+
 #asyncio.run(debug1())
 
 async def on_startup():
-    asyncio.create_task(update_messages())
+    asyncio.create_task(UDP_Reciever())
+
 
 async def on_shutdown():
     global stop_tasks
