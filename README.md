@@ -1,3 +1,4 @@
+# CHECK THE OTHER BRANCH FOR WORKING CODE
 This project aims to create a way to communicate through UDP between multiple people through one main server
 
 Probably been done before, but this time I plan to make it really simple, with most of the basic functionality.
