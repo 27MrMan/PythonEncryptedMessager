@@ -194,7 +194,9 @@ async def handle_message(data, address, conn, transport):
                 user_authorList[address] = inputlist[0]
 
         case 4: #client request messages
-            pass
+            print(f"Client {address}, requested messages")
+
+
     if usingcursor:
         await cursor.close()
 

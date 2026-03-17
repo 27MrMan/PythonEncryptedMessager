@@ -119,7 +119,7 @@ async def submit_auth(user_input, pass_input):
     if data2 == "pass":
         user_validated = True
         ui.navigate.to('/main')
-        sock.close()
+        #sock.close()
         running1= True
 
 async def submit_addr(spt1, sip1):
@@ -192,6 +192,7 @@ async def debug1():
         await asyncio.sleep(1)
 
 async def UDP_Reciever():
+    global SERVER_IP, SERVER_PORT, sock
     loop = asyncio.get_running_loop()
 
     while not running1:
@@ -202,6 +203,8 @@ async def UDP_Reciever():
 
 
     print("Reciever up")
+    sock.sendto("ŸŸŸŸ".encode(), (SERVER_IP, SERVER_PORT))
+
     try: 
         await asyncio.Future()
     finally:
