@@ -33,6 +33,18 @@ async def start_aiosqlite():
     ''')
     await conn.commit()
 
+    global S_conn
+    S_conn = await aiosqlite.connect(":memory:")
+    await S_conn.execute('''
+    CREATE TABLE IF NOT EXISTS s_messages (
+        FIND INTEGER PRIMARY KEY NOT NULL,
+        AUTHOR TEXT NOT NULL,
+        CONTENT TEXT NOT NULL,
+        TIMESTAMP TEXT NOT NULL
+    )
+    ''')
+    await S_conn.commit()
+#do the thing past 27 didnt
 
 #SQlite code
 
@@ -182,11 +194,13 @@ async def handle_message(data, address, conn, transport):
             #print(cleaned_data)
             inputlist = decode_data_content.strip().split("|")
             user_collection = pandas.read_csv('users.csv')
+
+            #^^ do this globally and run it in this loop only if user not found
             
 
             if not(inputlist[0] in user_collection['userid'].tolist()):
                 transport.sendto("User not found".encode(), address)
-                print("goofy ahh user tried joinin' ")
+                print(f"goofy ahh user {inputlist[0]} tried joinin' ")
                 return
             
             passhash_lookup = user_collection.loc[user_collection['userid'] == inputlist[0], 'password'].item()

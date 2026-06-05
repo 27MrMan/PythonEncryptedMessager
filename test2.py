@@ -121,6 +121,8 @@ async def submit_auth(user_input, pass_input):
         ui.navigate.to('/main')
         #sock.close()
         running1= True
+#^^ figure out a better login and auth and server selection screen
+
 
 async def submit_addr(spt1, sip1):
     global SERVER_IP
@@ -131,11 +133,14 @@ async def submit_addr(spt1, sip1):
         SERVER_IP = spt1.value.strip()
         SERVER_PORT = spt1.value.strip()
 
-async def update_messages(data, address, transport):    
+async def recieve_messages(data, address, transport):    
+    pass
+
+
+async def update_local_messages(data, address, transport):    
     global messages
-
+    
     decode_data = data.decode(errors='ignore')
-
     
 
 
@@ -199,7 +204,7 @@ async def UDP_Reciever():
         await asyncio.sleep(1)
 
     transport, protocol = await loop.create_datagram_endpoint(
-        lambda: UDP_Protocol(update_messages),local_addr = ('127.0.0.1','27000'))
+        lambda: UDP_Protocol(recieve_messages),local_addr = ('127.0.0.1','27000'))
 
 
     print("Reciever up")
