@@ -59,7 +59,7 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
 #obtaining the aes256 key#
-msg1 = "Ÿ"+pub_key_str
+msg1 = "Ÿ:"+pub_key_str
 sock.sendto(msg1.encode(), (SERVER_IP, SERVER_PORT))
 
 data1, address = sock.recvfrom(4096)
@@ -110,7 +110,7 @@ async def submit_auth(user_input, pass_input):
     print(username, password)
     print(type(username))
 
-    payload = "ŸŸŸ"+username+'|'+uid_hash(username, password)
+    payload = "ŸŸŸ:"+username+'|'+uid_hash(username, password)
     loadin = True
     sock.sendto(payload.encode(), (SERVER_IP, SERVER_PORT))
 
@@ -135,7 +135,6 @@ async def update_messages(data, address, transport):
     global messages
 
     decode_data = data.decode(errors='ignore')
-    cleaned_data = decode_data.replace('Ÿ', '')
 
     
 
@@ -182,6 +181,7 @@ async def main_page():
         with splitter.before:
             ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
 
+#use ui.scroll_area() and chat messages!
 
 
 async def debug1():
@@ -203,7 +203,7 @@ async def UDP_Reciever():
 
 
     print("Reciever up")
-    sock.sendto("ŸŸŸŸ".encode(), (SERVER_IP, SERVER_PORT))
+    sock.sendto("ŸŸŸŸ:".encode(), (SERVER_IP, SERVER_PORT))
 
     try: 
         await asyncio.Future()

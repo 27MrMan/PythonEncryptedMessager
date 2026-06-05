@@ -125,7 +125,11 @@ async def handle_message(data, address, conn, transport):
     if address not in user_keyList.keys():
         user_keyList[address] = ""
     
-    match decode_data.count("Ÿ"):
+
+    #!!! FOOLPROOF !!!use a special character, and str.split() at the first occurance!
+    decode_data_meta, decode_data_content = decode_data.split(":", 1)
+
+    match decode_data_meta.count("Ÿ"):
         case 1: #get AES key
             print('test3')
             charset = string.ascii_letters + string.digits + string.punctuation
