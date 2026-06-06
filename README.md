@@ -22,6 +22,8 @@ The biggest priority here has been given to data security, where just about all 
 ### Data Storage
 - This program works on the assumption that the server is in a relatively safe place where encryption isnt needed (data is stored in plaintext for speed)
 HOWEVER, i may, in the future, add an option for optional aes encryption of message in storage- idk
+- There will be two databases on the server- one on disk, and one in memory, and the clients can choose which database to send the messages to; The Disk data will be sent to every client based on how many messages they request (configurable, of course :3), and the memory one will only be sent to other clients connected at the same time as the message sent.
+- The Disk database will persist after server reboots, however the memory one will get wiped on both ends, for higher security to those messages.
 
 ## Extra
 this program is still under construction~
