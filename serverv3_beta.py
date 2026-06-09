@@ -44,7 +44,30 @@ async def start_aiosqlite():
     )
     ''')
     await S_conn.commit()
-#do the thing past 27 didnt
+
+    tcsr = await conn.cursor()
+    stcsr = await S_conn.cursor()
+
+    await tcsr.execute('SELECT EXISTS(SELECT 1 FROM messages LIMIT 1)')
+    connvals = await tcsr.fetchall()
+    if connvals[0][0] == 0:
+        await tcsr.execute('INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (1, "server", "init_database", ?)', (datetime.datetime.now(datetime.UTC).timestamp(),))
+        await conn.commit()
+
+    await stcsr.execute('SELECT EXISTS(SELECT 1 FROM s_messages LIMIT 1)')
+    sconnvals = await stcsr.fetchall()
+    if sconnvals[0][0] == 0:
+        await stcsr.execute('INSERT INTO s_messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (1, "server", "init_database", ?)', (datetime.datetime.now(datetime.UTC).timestamp(),))
+        await S_conn.commit()
+
+    await tcsr.close()
+    await stcsr.close()
+
+    #await stcsr.execute('select * from s_messages')
+    #z = await stcsr.fetchall()
+    #print('mem val', z)
+
+#i did the thing, finally
 
 #SQlite code
 
