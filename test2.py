@@ -13,12 +13,6 @@ from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
 import base64
 
-# Generate RSA keys
-key = RSA.generate(2048)
-pkey = key
-public_key = key.publickey()
-pub_key_str = key.publickey().export_key().decode('utf-8')
-
 # Encrypt
 def rsa_encrypt(plaintext, public_key):
     cipher = PKCS1_OAEP.new(public_key)
@@ -50,25 +44,58 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
     plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
     return plaintext
 
-#SERVER_IP = "127.0.0.1"
-SERVER_IP = 'yellow-custody.gl.at.ply.gg'
-#SERVER_PORT = 2700
-SERVER_PORT = 46163
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+SERVER_IP = "127.0.0.1"
+#SERVER_IP = 'yellow-custody.gl.at.ply.gg'
+SERVER_PORT = 2700
+#SERVER_PORT = 46163
+#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #sock.bind(('127.0.0.1', 27000))
 
+transport = None
 
 #obtaining the aes256 key#
-msg1 = "Ÿ:"+pub_key_str
-sock.sendto(msg1.encode(), (SERVER_IP, SERVER_PORT))
+skey = None
 
-data1, address = sock.recvfrom(4096)
+authenticating = False
+authKey = None
 
-skey = rsa_decrypt(data1, pkey)
+keyWait = asyncio.Event()
 
-#DEBUG
-print(skey)
-skey = skey.encode()
+server_addr = None
+
+async def resolve_server_addr():
+    global SERVER_IP, SERVER_PORT
+    loop = asyncio.get_running_loop()
+    infos = await loop.getaddrinfo(SERVER_IP, SERVER_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    print(infos[0][4])
+    return infos[0][4]
+
+async def encrypt_connect():
+    global authenticating, authKey, keyWait
+    global skey
+    authenticating = True
+
+    #generate RSA keys
+
+    key = RSA.generate(2048)
+    pkey = key
+    public_key = key.publickey()
+    pub_key_str = key.publickey().export_key().decode('utf-8')
+
+    msg1 = "Ÿ:"+pub_key_str
+    transport.sendto(msg1.encode(), server_addr)
+
+    await keyWait.wait()
+    keyWait.clear()
+
+    skey1 = rsa_decrypt(authKey, pkey)
+    print(skey1)
+    skey = skey1.encode()
+    
+    authenticating = False
+    
+
+
 
 def uid_hash(uid,psw):
     combined = f"{uid}|owo-{psw}"
@@ -82,9 +109,10 @@ stop_tasks = False
 user_input = ''
 pass_input = ''
 sip1,spt1 = '',''
-running1= False
+#running1= False
 
 class UDP_Protocol(asyncio.DatagramProtocol):
+    global authenticating, authKey, keyWait
     def __init__(self, on_datagram):
         self.on_datagram = on_datagram
         self.transport = None
@@ -93,6 +121,12 @@ class UDP_Protocol(asyncio.DatagramProtocol):
         self.transport = transport
 
     def datagram_received(self, data, address):
+        global authenticating, authKey, keyWait
+        #pass to auth thingy
+        if authenticating:
+            authKey = data
+            keyWait.set()
+
         asyncio.create_task(self.on_datagram(data, address, self.transport))
 
 messages = {} #message_index (find) : Message Tuple (find, etc, content, etc)
@@ -102,7 +136,9 @@ async def submit_auth(user_input, pass_input):
     global password
     global loadin
     global user_validated
-    global running1
+    global running1, keyWait, authKey, authenticating, transport
+
+    authenticating = True
     
     username = user_input.value.strip()
     password = pass_input.value.strip()
@@ -112,15 +148,19 @@ async def submit_auth(user_input, pass_input):
 
     payload = "ŸŸŸ:"+username+'|'+uid_hash(username, password)
     loadin = True
-    sock.sendto(payload.encode(), (SERVER_IP, SERVER_PORT))
+    transport.sendto(payload.encode(), server_addr)
 
-    data2, address = sock.recvfrom(4096)
+    await keyWait.wait()
+    data2 = authKey
+    
     data2= data2.decode()
-    if data2 == "pass":
+    if data2 == "v:pass":
         user_validated = True
         ui.navigate.to('/main')
         #sock.close()
         running1= True
+
+    authenticating = False
 #^^ figure out a better login and auth and server selection screen
 
 
@@ -133,8 +173,20 @@ async def submit_addr(spt1, sip1):
         SERVER_IP = spt1.value.strip()
         SERVER_PORT = spt1.value.strip()
 
-async def recieve_messages(data, address, transport):    
-    pass
+async def recieve_messages(data, address, transport):
+    print('uwu')
+    decode_data = data.decode(errors='ignore')
+    decode_data_meta, decode_data_content = decode_data.split(":", 1)
+
+    if decode_data_meta.count("p") == 1:
+        dcData = decrypt_AES_GCM(decode_data_content)
+        print(dcData)
+
+        transport.sendto("ŸŸŸŸŸ".encode(), server_addr)
+    if decode_data_meta.count("n") == 1:
+        print('pinged')
+    if decode_data_meta.count('v') >= 1:
+        print(decode_data_content)
 
 
 async def update_local_messages(data, address, transport):    
@@ -186,6 +238,7 @@ async def main_page():
         with splitter.before:
             ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
 
+
 #use ui.scroll_area() and chat messages!
 
 
@@ -197,26 +250,24 @@ async def debug1():
         await asyncio.sleep(1)
 
 async def UDP_Reciever():
-    global SERVER_IP, SERVER_PORT, sock
+    global SERVER_IP, SERVER_PORT, sock, transport
+    global server_addr
     loop = asyncio.get_running_loop()
 
-    while not running1:
-        await asyncio.sleep(1)
-
     transport, protocol = await loop.create_datagram_endpoint(
-        lambda: UDP_Protocol(recieve_messages),local_addr = ('127.0.0.1','27000'))
+        lambda: UDP_Protocol(recieve_messages), local_addr=('127.0.0.1', 27000))
 
 
+    server_addr = await resolve_server_addr()
+    await encrypt_connect()
     print("Reciever up")
-    sock.sendto("ŸŸŸŸ:".encode(), (SERVER_IP, SERVER_PORT))
+    #sock.sendto("ŸŸŸŸ:".encode(), (SERVER_IP, SERVER_PORT))
 
     try: 
         await asyncio.Future()
     finally:
         transport.close()
 
-
-#asyncio.run(debug1())
 
 async def on_startup():
     asyncio.create_task(UDP_Reciever())

@@ -21,7 +21,7 @@ import base64
 
 conn = None
 async def start_aiosqlite():
-    global conn
+    global conn, current_message_indexes
     conn = await aiosqlite.connect('messages.db')
     await conn.execute('''
     CREATE TABLE IF NOT EXISTS messages (
@@ -60,6 +60,15 @@ async def start_aiosqlite():
         await stcsr.execute('INSERT INTO s_messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (1, "server", "init_database", ?)', (datetime.datetime.now(datetime.UTC).timestamp(),))
         await S_conn.commit()
 
+    await tcsr.execute("SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
+    cindex = await tcsr.fetchone()
+    await stcsr.execute('SELECT * FROM s_messages ORDER BY FIND DESC LIMIT 1')
+    dindex = await stcsr.fetchone()
+
+    current_message_indexes = [cindex[0], dindex[0]]
+
+    print('current message counts:', current_message_indexes)
+
     await tcsr.close()
     await stcsr.close()
 
@@ -70,8 +79,6 @@ async def start_aiosqlite():
 #i did the thing, finally
 
 #SQlite code
-
-
 
 
 
@@ -124,6 +131,8 @@ user_keyList = {}
 user_authorList = {}
 decode_data = None
 
+current_message_indexes = None
+
 #msg_pipeline = []
 '''
 async def addMsg():
@@ -143,14 +152,16 @@ async def addMsg():
 #asyncio.run(addMsg())
 write_lock = asyncio.Lock()
 
-async def handle_message(data, address, conn, transport):
+async def handle_message(data, address, conn, transport, S_conn):
     # conn and transport are passed explicitly
     print('test2')
     usingcursor = False
+    usingscursor = False
 
     # globals still in use for other state
     global user_keyList, user_authorList
     global IP, PORT
+    global current_message_indexes
 
 
     decode_data = data.decode(errors='ignore')
@@ -160,7 +171,7 @@ async def handle_message(data, address, conn, transport):
         user_keyList[address] = ""
     
 
-    #!!! FOOLPROOF !!!use a special character, and str.split() at the first occurance!
+    #*i forgot modified clients can exist :sob:*use a special character, and str.split() at the first occurance!
     decode_data_meta, decode_data_content = decode_data.split(":", 1)
 
     match decode_data_meta.count("Ÿ"):
@@ -183,68 +194,101 @@ async def handle_message(data, address, conn, transport):
                 print("i smell a modified client","\nRico: Kaboom...?")
                 return
 
-            cursor = await conn.cursor()
-            usingcursor = True
 
             temp_msg = decrypt_AES_GCM(decode_data_content, user_keyList[address].encode())
             temp_msg = temp_msg.decode()
-
-
+            
             #structure: index, author, content, timestamp
-            indexfinder = await cursor.execute(f"SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
-            cindex = await cursor.fetchone()
-            #For initilizing an empty database, i have to add some code later
-            cindex = int(cindex[0]) +1
-            cauthor = user_authorList[address]
-            ccontent = temp_msg.strip()
-            ctime = datetime.datetime.now(datetime.UTC).timestamp()
 
-            #msg_pipeline.append([cindex, cauthor, ccontent, ctime])
-            #figure out asynchronous messages eventually
+            if decode_data_meta.count("$")==1:
+                scursor = await S_conn.cursor()
+                usingscursor = True
 
-            try:
-                async with write_lock:
-                    await cursor.execute("INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
-                                (cindex, cauthor, ccontent, ctime))
-                    await conn.commit()
-            except Exception as e:
-                print("SQL PROBLEM!!",e)
+                cindex = int(current_message_indexes[0])+1
+                current_message_indexes[1]+=1
+                cauthor = user_authorList[address]
+                ccontent = temp_msg.strip()
+                ctime = datetime.datetime.now(datetime.UTC).timestamp()
 
+                try:
+                    async with write_lock:
+                        await scursor.execute("INSERT INTO s_messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
+                                    (cindex, cauthor, ccontent, ctime))
+                        await S_conn.commit()
+                except Exception as e:
+                    print("SQL PROBLEM!!", e)
+                
+                print("SECURE message recieved", cauthor)
+        
+            else:
+                cursor = await conn.cursor()
+                usingcursor = True     
 
-            print("message recieved", cauthor)
+                #await cursor.execute(f"SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
+                #i dont know if it will suffer from data races if i replace this with the global vairable...
+                #cindex = await cursor.fetchone()
+                cindex = int(current_message_indexes[0])+1
+                current_message_indexes[0]+=1
+                cauthor = user_authorList[address]
+                ccontent = temp_msg.strip()
+                ctime = datetime.datetime.now(datetime.UTC).timestamp()
+
+                try:
+                    async with write_lock:
+                        await cursor.execute("INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
+                                    (cindex, cauthor, ccontent, ctime))
+                        await conn.commit()
+                except Exception as e:
+                    print("SQL PROBLEM!!",e)
+
+                print("message recieved", cauthor)
 
         case 3: #login
             #print(cleaned_data)
             inputlist = decode_data_content.strip().split("|")
             user_collection = pandas.read_csv('users.csv')
+            #^feature to allow change in user list without restarting server :3
 
-            #^^ do this globally and run it in this loop only if user not found
-            
 
             if not(inputlist[0] in user_collection['userid'].tolist()):
-                transport.sendto("User not found".encode(), address)
+                transport.sendto("v:User not found".encode(), address)
                 print(f"goofy ahh user {inputlist[0]} tried joinin' ")
                 return
             
             passhash_lookup = user_collection.loc[user_collection['userid'] == inputlist[0], 'password'].item()
             if inputlist[1] == passhash_lookup:
-                transport.sendto("pass".encode(), address)
+                transport.sendto("v:pass".encode(), address)
                 
                 print(inputlist[0], 'has joined')
                 user_authorList[address] = inputlist[0]
 
         case 4: #client request messages
             print(f"Client {address}, requested messages")
+            print(user_keyList, user_keyList[address])
+
+            msgDict = encrypt_AES_GCM("Placeholder MSGDICT", user_keyList[address].encode())
+            msgDict = "p:"+msgDict
+
+            transport.sendto(msgDict.encode(), address)
+
+        case 5: #client ping
+            print(f"client {address}, pinged")
+
+            transport.sendto("n:Ping Recieved".encode(), address)
+            
 
 
     if usingcursor:
         await cursor.close()
+    if usingscursor:
+        await scursor.close()
 
 class UDP_Protocol(asyncio.DatagramProtocol):
-    def __init__(self, on_datagram, conn):
+    def __init__(self, on_datagram, conn, S_conn):
         # on_datagram should be a coroutine accepting (data, address, conn, transport)
         self.on_datagram = on_datagram
         self.conn = conn
+        self.S_conn = S_conn
         self.transport = None
 
     def connection_made(self, transport):
@@ -256,7 +300,7 @@ class UDP_Protocol(asyncio.DatagramProtocol):
         print(f"Received {message!r} from {address}")
         
         # Run the callback asynchronously, passing the shared connection and transport
-        asyncio.create_task(self.on_datagram(data, address, self.conn, self.transport))
+        asyncio.create_task(self.on_datagram(data, address, self.conn, self.transport, self.S_conn))
 
 async def main():
     await start_aiosqlite()
@@ -264,7 +308,7 @@ async def main():
 
     # create a protocol instance that closes over the sqlite connection
     transport, protocol = await loop.create_datagram_endpoint(
-        lambda: UDP_Protocol(handle_message, conn),
+        lambda: UDP_Protocol(handle_message, conn, S_conn),
         local_addr=('127.0.0.1', 2700)
     )
     print("New Server Running on 127.0.0.1:2700")
