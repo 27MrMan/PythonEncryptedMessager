@@ -309,7 +309,7 @@ async def main():
     # create a protocol instance that closes over the sqlite connection
     transport, protocol = await loop.create_datagram_endpoint(
         lambda: UDP_Protocol(handle_message, conn, S_conn),
-        local_addr=('127.0.0.1', 2700)
+        local_addr=('0.0.0.0', 2700)
     )
     print("New Server Running on 127.0.0.1:2700")
 

@@ -44,10 +44,11 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
     plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
     return plaintext
 
-#SERVER_IP = "127.0.0.1"
-SERVER_IP = '147.185.221.31'
-#SERVER_PORT = 2700
-SERVER_PORT = 46163
+SERVER_IP = "127.0.0.1"
+#SERVER_IP = '147.185.221.31'
+#SERVER_IP = '100.66.81.74'
+SERVER_PORT = 2700
+#SERVER_PORT = 46163
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #sock.bind(('127.0.0.1', 27000))
 
@@ -105,7 +106,7 @@ async def encrypt_connect():
     pub_key_str = key.publickey().export_key().decode('utf-8')
 
     msg1 = "Ÿ:"+pub_key_str
-    transport.sendto(msg1.encode())
+    transport.sendto(msg1.encode(), server_addr)
 
     await keyWait.wait()
     keyWait.clear()
@@ -172,7 +173,7 @@ async def submit_auth(user_input, pass_input):
 
     payload = "ŸŸŸ:"+username+'|'+uid_hash(username, password)
     loadin = True
-    transport.sendto(payload.encode())
+    transport.sendto(payload.encode(), server_addr)
 
     await keyWait.wait()
     data2 = authKey
@@ -217,7 +218,7 @@ async def recieve_messages(data, address, transport):
         dcData = decrypt_AES_GCM(decode_data_content, skey)
         print(dcData)
 
-        transport.sendto("ŸŸŸŸŸ".encode())
+        transport.sendto("ŸŸŸŸŸ".encode(), server_addr)
     if decode_data_meta.count("n") == 1:
         print('pinged')
     if decode_data_meta.count('v') >= 1:
@@ -289,15 +290,14 @@ async def UDP_Reciever():
     global server_addr
     loop = asyncio.get_running_loop()
 
+    transport, protocol = await loop.create_datagram_endpoint(
+        lambda: UDP_Protocol(recieve_messages), local_addr=('0.0.0.0', 27000))
+
     try:
         server_addr = await resolve_server_addr()
     except:
         print("performing alternate address resolver")
         server_addr = await alt_resolve_server_addr()
-
-    transport, protocol = await loop.create_datagram_endpoint(
-        lambda: UDP_Protocol(recieve_messages), local_addr=('0.0.0.0', 27000), remote_addr=server_addr)
-
 
     await encrypt_connect()
     print("Reciever up")
