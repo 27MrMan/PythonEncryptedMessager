@@ -44,10 +44,10 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
     plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
     return plaintext
 
-SERVER_IP = "127.0.0.1"
-#SERVER_IP = 'yellow-custody.gl.at.ply.gg'
-SERVER_PORT = 2700
-#SERVER_PORT = 46163
+#SERVER_IP = "127.0.0.1"
+SERVER_IP = '147.185.221.31'
+#SERVER_PORT = 2700
+SERVER_PORT = 46163
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #sock.bind(('127.0.0.1', 27000))
 
@@ -60,15 +60,37 @@ authenticating = False
 authKey = None
 
 keyWait = asyncio.Event()
+keyWait.clear()
 
 server_addr = None
 
 async def resolve_server_addr():
     global SERVER_IP, SERVER_PORT
+    if 'gl' in SERVER_IP:
+        raise RuntimeError("Playit IP")
     loop = asyncio.get_running_loop()
     infos = await loop.getaddrinfo(SERVER_IP, SERVER_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM)
     print(infos[0][4])
     return infos[0][4]
+
+async def alt_resolve_server_addr():
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(
+            SERVER_IP, SERVER_PORT, type=socket.SOCK_DGRAM, proto=socket.IPPROTO_UDP
+        )
+    except socket.gaierror as e:
+        print(f"DNS resolution failed, {e}")
+        return
+
+    if not infos:
+        print(f"No address info found")
+        return
+
+    # Pick the first resolved address
+    family, type_, proto, canonname, sockaddr = infos[0]
+    ip, resolved_port = sockaddr[0], sockaddr[1]
+    print(ip,resolved_port)
+    return (ip,resolved_port)
 
 async def encrypt_connect():
     global authenticating, authKey, keyWait
@@ -92,6 +114,8 @@ async def encrypt_connect():
     print(skey1)
     skey = skey1.encode()
     
+    #stupid data races
+    await asyncio.sleep(.5)
     authenticating = False
     
 
@@ -174,12 +198,23 @@ async def submit_addr(spt1, sip1):
         SERVER_PORT = spt1.value.strip()
 
 async def recieve_messages(data, address, transport):
+    global authenticating
+    if authenticating:
+        print("still under auth, cancelling message read")
+        return
+    
     print('uwu')
     decode_data = data.decode(errors='ignore')
-    decode_data_meta, decode_data_content = decode_data.split(":", 1)
+
+    try:
+        decode_data_meta, decode_data_content = decode_data.split(":", 1)
+    except:
+        #should only happen due to programming skill issues
+        print('unknown meta', decode_data)
+        return
 
     if decode_data_meta.count("p") == 1:
-        dcData = decrypt_AES_GCM(decode_data_content)
+        dcData = decrypt_AES_GCM(decode_data_content, skey)
         print(dcData)
 
         transport.sendto("ŸŸŸŸŸ".encode(), server_addr)
@@ -257,11 +292,14 @@ async def UDP_Reciever():
     transport, protocol = await loop.create_datagram_endpoint(
         lambda: UDP_Protocol(recieve_messages), local_addr=('127.0.0.1', 27000))
 
+    try:
+        server_addr = await resolve_server_addr()
+    except:
+        print("performing alternate address resolver")
+        server_addr = await alt_resolve_server_addr()
 
-    server_addr = await resolve_server_addr()
     await encrypt_connect()
     print("Reciever up")
-    #sock.sendto("ŸŸŸŸ:".encode(), (SERVER_IP, SERVER_PORT))
 
     try: 
         await asyncio.Future()
