@@ -153,7 +153,8 @@ class UDP_Protocol(asyncio.DatagramProtocol):
 
         asyncio.create_task(self.on_datagram(data, address, self.transport))
 
-messages = {} #message_index (find) : Message Tuple (find, etc, content, etc)
+messages =  [] #Message Tuple (find, author, content, timestamp)
+smessages = []
 
 async def submit_auth(user_input, pass_input):
     global username
@@ -199,6 +200,7 @@ async def submit_addr(spt1, sip1):
 
 async def recieve_messages(data, address, transport):
     global authenticating
+    global messages
     if authenticating:
         print("still under auth, cancelling message read")
         return
@@ -217,16 +219,40 @@ async def recieve_messages(data, address, transport):
         dcData = decrypt_AES_GCM(decode_data_content, skey)
         print(dcData)
 
-        transport.sendto("ŸŸŸŸŸ".encode())
+        #append to the list
+
+        #transport.sendto("ŸŸŸŸŸ".encode())
     if decode_data_meta.count("n") == 1:
         print('pinged')
+    if decode_data_meta.count("m") == 1:
+        dcData = decrypt_AES_GCM(decode_data_content, skey)
+        #debug
+        print(dcData)
+        securemode = False
+        Mmeta, Mdata = dcData.split(':',1)
+        if '$' in Mmeta:
+            securemode = True
+            Mmeta.replace("$", '')
+
+        cALen, cTime, cFind = Mmeta.split('-')
+        cAuthor = Mdata[:cALen+1]
+        cContent = Mdata[cALen+1:]
+
+        if not securemode:
+            messages.append((cFind, cAuthor, cContent, cTime))
+        else:
+            smessages.append((cFind, cAuthor, cContent, cTime))
+
     if decode_data_meta.count('v') >= 1:
         print(decode_data_content)
+    
 
 
 async def update_local_messages(data, address, transport):    
     global messages
-    
+    #manage chat messages here
+    #check test.py for heapq algorithm
+
     decode_data = data.decode(errors='ignore')
     
 

@@ -204,14 +204,15 @@ async def handle_message(data, address, conn, transport, S_conn):
                 scursor = await S_conn.cursor()
                 usingscursor = True
 
-                cindex = int(current_message_indexes[0])+1
-                current_message_indexes[1]+=1
+
                 cauthor = user_authorList[address]
                 ccontent = temp_msg.strip()
                 ctime = datetime.datetime.now(datetime.UTC).timestamp()
 
                 try:
                     async with write_lock:
+                        cindex = int(current_message_indexes[1])+1
+                        current_message_indexes[1]+=1
                         await scursor.execute("INSERT INTO s_messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
                                     (cindex, cauthor, ccontent, ctime))
                         await S_conn.commit()
@@ -227,14 +228,15 @@ async def handle_message(data, address, conn, transport, S_conn):
                 #await cursor.execute(f"SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
                 #i dont know if it will suffer from data races if i replace this with the global vairable...
                 #cindex = await cursor.fetchone()
-                cindex = int(current_message_indexes[0])+1
-                current_message_indexes[0]+=1
+
                 cauthor = user_authorList[address]
                 ccontent = temp_msg.strip()
                 ctime = datetime.datetime.now(datetime.UTC).timestamp()
 
                 try:
                     async with write_lock:
+                        cindex = int(current_message_indexes[0])+1
+                        current_message_indexes[0]+=1
                         await cursor.execute("INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES (?, ?, ?, ?)",
                                     (cindex, cauthor, ccontent, ctime))
                         await conn.commit()
@@ -242,6 +244,13 @@ async def handle_message(data, address, conn, transport, S_conn):
                     print("SQL PROBLEM!!",e)
 
                 print("message recieved", cauthor)
+
+            #once again, theres a better way to do this isnt there
+            cMG = str(len(cauthor))+'-' + str(ctime)+'-'+str(cindex)+':'+cauthor+ccontent
+            for ad in user_authorList.keys():
+                v1 = encrypt_AES_GCM(cMG, user_keyList[address].encode())
+                v1 = 'm:'+v1
+                transport.sendto(v1.encode(), ad)
 
         case 3: #login
             #print(cleaned_data)
@@ -265,6 +274,8 @@ async def handle_message(data, address, conn, transport, S_conn):
         case 4: #client request messages
             print(f"Client {address}, requested messages")
             print(user_keyList, user_keyList[address])
+
+            #order by timestamp, send only bufsize (50 ig) messages using between
 
             msgDict = encrypt_AES_GCM("Placeholder MSGDICT", user_keyList[address].encode())
             msgDict = "p:"+msgDict
@@ -311,7 +322,7 @@ async def main():
         lambda: UDP_Protocol(handle_message, conn, S_conn),
         local_addr=('0.0.0.0', 2700)
     )
-    print("New Server Running on 127.0.0.1:2700")
+    print("New Server Running on 0.0.0.0:2700")
 
     try:
         #await asyncio.sleep(3600)
