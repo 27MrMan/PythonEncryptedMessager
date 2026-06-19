@@ -11,7 +11,9 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
+
 import base64
+import json
 
 # Encrypt
 def rsa_encrypt(plaintext, public_key):
@@ -44,10 +46,10 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
     plaintext = aesCipher.decrypt_and_verify(ciphertext, authTag)
     return plaintext
 
-#SERVER_IP = "127.0.0.1"
-SERVER_IP = '147.185.221.31'
-#SERVER_PORT = 2700
-SERVER_PORT = 46163
+SERVER_IP = "127.0.0.1"
+#SERVER_IP = '147.185.221.31'
+SERVER_PORT = 2700
+#SERVER_PORT = 46163
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #sock.bind(('127.0.0.1', 27000))
 
@@ -180,10 +182,13 @@ async def submit_auth(user_input, pass_input):
     
     data2= data2.decode()
     if data2 == "v:pass":
+        authenticating = False
+        await asyncio.sleep(0.2)
         user_validated = True
         ui.navigate.to('/main')
-        #sock.close()
         running1= True
+    
+        transport.sendto("ŸŸŸŸ:".encode())
 
     authenticating = False
 #^^ figure out a better login and auth and server selection screen
@@ -217,13 +222,18 @@ async def recieve_messages(data, address, transport):
 
     if decode_data_meta.count("p") == 1:
         dcData = decrypt_AES_GCM(decode_data_content, skey)
-        print(dcData)
+        dJson = base64.b64decode(dcData).decode('utf-8')
+        msgList = json.loads(dJson)
+
+        #print(msgList, type(msgList), msgList[0])
 
         #append to the list
 
         #transport.sendto("ŸŸŸŸŸ".encode())
+
     if decode_data_meta.count("n") == 1:
         print('pinged')
+
     if decode_data_meta.count("m") == 1:
         dcData = decrypt_AES_GCM(decode_data_content, skey)
         #debug

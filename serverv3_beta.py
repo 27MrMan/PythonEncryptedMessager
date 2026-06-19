@@ -14,7 +14,9 @@ from Crypto.Cipher import AES
 import string, secrets
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
+
 import base64
+import json
 
 #conn = sqlite3.connect('messages.db')
 #cursor = conn.cursor()
@@ -273,14 +275,26 @@ async def handle_message(data, address, conn, transport, S_conn):
 
         case 4: #client request messages
             print(f"Client {address}, requested messages")
-            print(user_keyList, user_keyList[address])
+            #print(user_keyList, user_keyList[address])
 
+            cursor = await conn.cursor()
+            usingcursor = True
+            bufsize = 50
+
+            await cursor.execute('SELECT * FROM messages WHERE FIND > ?', (current_message_indexes[0]-bufsize,))
+            msgsContent = await cursor.fetchall()
+            print(msgsContent)
             #order by timestamp, send only bufsize (50 ig) messages using between
 
-            msgDict = encrypt_AES_GCM("Placeholder MSGDICT", user_keyList[address].encode())
-            msgDict = "p:"+msgDict
+            jBytes = json.dumps(msgsContent).encode('utf-8')
+            enc_b64 = base64.b64encode(jBytes).decode('utf-8')
+            msgList = encrypt_AES_GCM(enc_b64, user_keyList[address].encode())
+            msgList = 'p:'+msgList
 
-            transport.sendto(msgDict.encode(), address)
+            #msgDict = encrypt_AES_GCM("Placeholder MSGDICT", user_keyList[address].encode())
+            #msgDict = "p:"+msgDict
+
+            transport.sendto(msgList.encode(), address)
 
         case 5: #client ping
             print(f"client {address}, pinged")
