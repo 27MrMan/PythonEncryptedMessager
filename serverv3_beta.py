@@ -275,7 +275,10 @@ async def handle_message(data, address, conn, transport, S_conn):
 
         case 4: #client request messages
             print(f"Client {address}, requested messages")
-            #print(user_keyList, user_keyList[address])
+            
+            if address not in user_authorList.keys():
+                print("Possible attack!")
+                return
 
             cursor = await conn.cursor()
             usingcursor = True

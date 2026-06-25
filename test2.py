@@ -12,6 +12,8 @@ from Crypto.Cipher import AES
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Random import get_random_bytes
 
+from heapq import merge
+
 import base64
 import json
 
@@ -205,7 +207,7 @@ async def submit_addr(spt1, sip1):
 
 async def recieve_messages(data, address, transport):
     global authenticating
-    global messages
+    global messages, smessages
     if authenticating:
         print("still under auth, cancelling message read")
         return
@@ -227,9 +229,10 @@ async def recieve_messages(data, address, transport):
 
         #print(msgList, type(msgList), msgList[0])
 
-        #append to the list
+        messages.extend(msgList)
+        print(messages)
 
-        #transport.sendto("ŸŸŸŸŸ".encode())
+        display_messages.refresh()
 
     if decode_data_meta.count("n") == 1:
         print('pinged')
@@ -252,18 +255,23 @@ async def recieve_messages(data, address, transport):
             messages.append((cFind, cAuthor, cContent, cTime))
         else:
             smessages.append((cFind, cAuthor, cContent, cTime))
+            del cContent
+            del dcData, Mdata
+        
+        display_messages.refresh()
 
     if decode_data_meta.count('v') >= 1:
         print(decode_data_content)
     
 
 
-async def update_local_messages(data, address, transport):    
-    global messages
+async def update_local_messages():    
+    global messages, smessages
     #manage chat messages here
     #check test.py for heapq algorithm
 
-    decode_data = data.decode(errors='ignore')
+    return list(merge(messages, smessages, key=lambda x:x[0]))
+    
     
 
 
@@ -300,15 +308,40 @@ def auth_page():
             ).classes('w-3/4 mx-auto')
 
 @ui.refreshable
-def display_messages(current_username: str):
-    pass
+async def display_messages():
+    #call update_local_messages and await it to get the content to display
+    displayData = await update_local_messages()
+    print('\n',displayData)
+
+    #Message Tuple (find, author, content, timestamp)
+    with ui.scroll_area().classes('w-full h-full'):
+        for msg in displayData:
+
+            ui.chat_message(
+                text=msg[2],
+                name=msg[1],
+                stamp=msg[3]
+            )
+
 
 @ui.page('/main')
 async def main_page():
-    with ui.splitter(horizontal=True).classes("w-full") as splitter:
+    with ui.splitter(horizontal=True, limits=(9,9), value=9).classes("w-full h-screen") as splitter:
         with splitter.before:
             ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
+        with splitter.after:
+            with ui.grid(rows='17fr 3fr').classes('h-full w-full'):
+                await display_messages()
+                ui.label('uwu')
 
+'''@ui.page('/main')
+async def main_page():
+    with ui.grid(rows="10% 80% 10%").classes('w-full h-full gap-0'):
+        ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
+
+        await display_messages()
+
+        ui.label('uwu')'''
 
 #use ui.scroll_area() and chat messages!
 
@@ -349,6 +382,8 @@ async def on_startup():
 
 
 async def on_shutdown():
+    global smessages, skey
+    smessages, skey = None, None
     global stop_tasks
     stop_tasks = True
 
