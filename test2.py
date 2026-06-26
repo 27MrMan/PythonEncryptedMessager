@@ -162,7 +162,7 @@ smessages = []
 
 async def submit_auth(user_input, pass_input):
     global username
-    global password
+    global password, skey
     global loadin
     global user_validated
     global running1, keyWait, authKey, authenticating, transport
@@ -175,7 +175,10 @@ async def submit_auth(user_input, pass_input):
     print(username, password)
     print(type(username))
 
-    payload = "ŸŸŸ:"+username+'|'+uid_hash(username, password)
+    payload = username+'|'+uid_hash(username, password)
+    payload = encrypt_AES_GCM(payload, skey)
+    payload = "ŸŸŸ:"+payload
+
     loadin = True
     transport.sendto(payload.encode())
 
@@ -242,14 +245,15 @@ async def recieve_messages(data, address, transport):
         #debug
         print(dcData)
         securemode = False
-        Mmeta, Mdata = dcData.split(':',1)
+        Mmeta, Mdata = dcData.decode().split(':',1)
         if '$' in Mmeta:
             securemode = True
             Mmeta.replace("$", '')
 
         cALen, cTime, cFind = Mmeta.split('-')
-        cAuthor = Mdata[:cALen+1]
-        cContent = Mdata[cALen+1:]
+        cALen = int(cALen)
+        cAuthor = Mdata[:cALen]
+        cContent = Mdata[cALen:]
 
         if not securemode:
             messages.append((cFind, cAuthor, cContent, cTime))
@@ -323,16 +327,33 @@ async def display_messages():
                 stamp=msg[3]
             )
 
+async def sendMessage(content, secureStatus):
+    global transport
+    if secureStatus:
+        scontent = encrypt_AES_GCM(content,skey)
+        scontent = "ŸŸ$:"+scontent
+    else:
+        scontent = encrypt_AES_GCM(content, skey)
+        scontent = "ŸŸ:"+scontent
+
+    print(scontent)
+    transport.sendto(scontent.encode())
 
 @ui.page('/main')
 async def main_page():
-    with ui.splitter(horizontal=True, limits=(9,9), value=9).classes("w-full h-screen") as splitter:
+    with ui.splitter(horizontal=True, limits=(9,9), value=9).classes("w-full h-[calc(100vh-2rem)]") as splitter:
         with splitter.before:
             ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
         with splitter.after:
             with ui.grid(rows='17fr 3fr').classes('h-full w-full'):
                 await display_messages()
-                ui.label('uwu')
+                
+                with ui.row().classes('w-full'):
+                    user_TextInput = ui.textarea(label='Enter Message')
+                    secureSwitch = ui.switch("Secure Message", value=False)
+                    ui.button('Send', on_click=lambda: sendMessage(user_TextInput.value, secureSwitch.value))
+
+
 
 '''@ui.page('/main')
 async def main_page():

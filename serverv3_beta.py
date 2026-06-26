@@ -174,7 +174,11 @@ async def handle_message(data, address, conn, transport, S_conn):
     
 
     #*i forgot modified clients can exist :sob:*use a special character, and str.split() at the first occurance!
-    decode_data_meta, decode_data_content = decode_data.split(":", 1)
+    try:
+        decode_data_meta, decode_data_content = decode_data.split(":", 1)
+    except:
+        print('\nno meta?',decode_data)
+        return
 
     match decode_data_meta.count("Ÿ"):
         case 1: #get AES key
@@ -196,7 +200,7 @@ async def handle_message(data, address, conn, transport, S_conn):
                 print("i smell a modified client","\nRico: Kaboom...?")
                 return
 
-
+            print('got message')
             temp_msg = decrypt_AES_GCM(decode_data_content, user_keyList[address].encode())
             temp_msg = temp_msg.decode()
             
@@ -256,7 +260,8 @@ async def handle_message(data, address, conn, transport, S_conn):
 
         case 3: #login
             #print(cleaned_data)
-            inputlist = decode_data_content.strip().split("|")
+            dcList = decrypt_AES_GCM(decode_data_content, user_keyList[address].encode())
+            inputlist = dcList.decode().strip().split("|")
             user_collection = pandas.read_csv('users.csv')
             #^feature to allow change in user list without restarting server :3
 
