@@ -1,4 +1,4 @@
-from nicegui import ui, app
+from nicegui import ui, app, events
 import asyncio
 import socket
 import sys
@@ -194,6 +194,8 @@ async def submit_auth(user_input, pass_input):
         running1= True
     
         transport.sendto("ŸŸŸŸ:".encode())
+    if data2 == 'v:User not found':
+        print('incorrect info')
 
     authenticating = False
 #^^ figure out a better login and auth and server selection screen
@@ -315,10 +317,10 @@ def auth_page():
 async def display_messages():
     #call update_local_messages and await it to get the content to display
     displayData = await update_local_messages()
-    print('\n',displayData)
+    print('\n','recieved messages')
 
     #Message Tuple (find, author, content, timestamp)
-    with ui.scroll_area().classes('w-full h-full'):
+    with ui.scroll_area().classes('w-full h-full') as textDisplayer:
         for msg in displayData:
 
             ui.chat_message(
@@ -326,8 +328,12 @@ async def display_messages():
                 name=msg[1],
                 stamp=msg[3]
             )
+        textDisplayer.scroll_to(percent=1.5)
+        
 
-async def sendMessage(content, secureStatus):
+async def sendMessage(content, secureStatus, bn, tarea):
+    bn.disable()
+
     global transport
     if secureStatus:
         scontent = encrypt_AES_GCM(content,skey)
@@ -338,33 +344,29 @@ async def sendMessage(content, secureStatus):
 
     print(scontent)
     transport.sendto(scontent.encode())
+    tarea.value = ''
+    await asyncio.sleep(.5)
+
+    bn.enable()
 
 @ui.page('/main')
 async def main_page():
+    global user_TextInput, secureSwitch, sendbutton
     with ui.splitter(horizontal=True, limits=(9,9), value=9).classes("w-full h-[calc(100vh-2rem)]") as splitter:
         with splitter.before:
             ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
         with splitter.after:
             with ui.grid(rows='17fr 3fr').classes('h-full w-full'):
                 await display_messages()
-                
+
                 with ui.row().classes('w-full'):
                     user_TextInput = ui.textarea(label='Enter Message')
                     secureSwitch = ui.switch("Secure Message", value=False)
-                    ui.button('Send', on_click=lambda: sendMessage(user_TextInput.value, secureSwitch.value))
+                    sendbutton = ui.button('Send', icon='send', on_click=lambda btn: sendMessage(user_TextInput.value, secureSwitch.value, btn.sender, user_TextInput))
+                    killbutton = ui.button('KILL')
 
+                    user_TextInput.on('keydown.enter', lambda: sendMessage(user_TextInput.value, secureSwitch.value, sendbutton, user_TextInput))
 
-
-'''@ui.page('/main')
-async def main_page():
-    with ui.grid(rows="10% 80% 10%").classes('w-full h-full gap-0'):
-        ui.label("27's Server").style('text-align: center; font-size: 350%; color: #7851A9').classes("w-full center")
-
-        await display_messages()
-
-        ui.label('uwu')'''
-
-#use ui.scroll_area() and chat messages!
 
 
 async def debug1():
@@ -394,22 +396,25 @@ async def UDP_Reciever():
 
     try: 
         await asyncio.Future()
+    except Exception as e:
+        print(e)
     finally:
         transport.close()
-
-
-async def on_startup():
-    asyncio.create_task(UDP_Reciever())
 
 
 async def on_shutdown():
     global smessages, skey
     smessages, skey = None, None
-    global stop_tasks
+    global stop_tasks, recieverTASK
     stop_tasks = True
+    if recieverTASK and not recieverTASK.done():
+        recieverTASK.cancel()
 
-
-app.on_startup(on_startup)
 app.on_shutdown(on_shutdown)
+
+@app.on_startup
+async def on_startup():
+    global recieverTASK
+    recieverTASK = asyncio.create_task(UDP_Reciever())
 
 ui.run(dark = True)

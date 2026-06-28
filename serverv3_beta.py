@@ -291,7 +291,7 @@ async def handle_message(data, address, conn, transport, S_conn):
 
             await cursor.execute('SELECT * FROM messages WHERE FIND > ?', (current_message_indexes[0]-bufsize,))
             msgsContent = await cursor.fetchall()
-            print(msgsContent)
+            #print(msgsContent)
             #order by timestamp, send only bufsize (50 ig) messages using between
 
             jBytes = json.dumps(msgsContent).encode('utf-8')
