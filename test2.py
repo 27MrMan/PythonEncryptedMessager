@@ -35,10 +35,8 @@ def encrypt_AES_GCM(msg, secretKey):
     ciphertext, authTag = aesCipher.encrypt_and_digest(msg.encode())
     blob = aesCipher.nonce + ciphertext + authTag
     return base64.b64encode(blob).decode('utf-8')
-    #return (ciphertext, aesCipher.nonce, authTag)
 
 def decrypt_AES_GCM(encryptedMsg, secretKey):
-    #encryptedMsg = base64.b64encode(encryptedMsg)
     encryptedMsg = base64.b64decode(encryptedMsg.encode())
     nonce = encryptedMsg[:16]
     ciphertext = encryptedMsg[16:-16]
@@ -49,11 +47,10 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
     return plaintext
 
 SERVER_IP = "127.0.0.1"
-#SERVER_IP = '147.185.221.31'
 SERVER_PORT = 2700
+#SERVER_IP = '147.185.221.31'
 #SERVER_PORT = 46163
-#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#sock.bind(('127.0.0.1', 27000))
+
 
 transport = None
 
@@ -74,7 +71,7 @@ async def resolve_server_addr():
         raise RuntimeError("Playit IP")
     loop = asyncio.get_running_loop()
     infos = await loop.getaddrinfo(SERVER_IP, SERVER_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM)
-    print(infos[0][4])
+    #print(infos[0][4])
     return infos[0][4]
 
 async def alt_resolve_server_addr():
@@ -93,7 +90,7 @@ async def alt_resolve_server_addr():
     # Pick the first resolved address
     family, type_, proto, canonname, sockaddr = infos[0]
     ip, resolved_port = sockaddr[0], sockaddr[1]
-    print(ip,resolved_port)
+    #print(ip,resolved_port)
     return (ip,resolved_port)
 
 async def encrypt_connect():
@@ -115,7 +112,7 @@ async def encrypt_connect():
     keyWait.clear()
 
     skey1 = rsa_decrypt(authKey, pkey)
-    print(skey1)
+    #print(skey1)
     skey = skey1.encode()
     
     #stupid data races
@@ -137,7 +134,6 @@ stop_tasks = False
 user_input = ''
 pass_input = ''
 sip1,spt1 = '',''
-#running1= False
 
 class UDP_Protocol(asyncio.DatagramProtocol):
     global authenticating, authKey, keyWait
@@ -172,8 +168,6 @@ async def submit_auth(user_input, pass_input):
     username = user_input.value.strip()
     password = pass_input.value.strip()
 
-    print(username, password)
-    print(type(username))
 
     payload = username+'|'+uid_hash(username, password)
     payload = encrypt_AES_GCM(payload, skey)
@@ -198,7 +192,6 @@ async def submit_auth(user_input, pass_input):
         print('incorrect info')
 
     authenticating = False
-#^^ figure out a better login and auth and server selection screen
 
 
 async def submit_addr(spt1, sip1):
@@ -217,7 +210,7 @@ async def recieve_messages(data, address, transport):
         print("still under auth, cancelling message read")
         return
     
-    print('uwu')
+    #print('uwu')
     decode_data = data.decode(errors='ignore')
 
     try:
@@ -232,10 +225,8 @@ async def recieve_messages(data, address, transport):
         dJson = base64.b64decode(dcData).decode('utf-8')
         msgList = json.loads(dJson)
 
-        #print(msgList, type(msgList), msgList[0])
 
         messages.extend(msgList)
-        print(messages)
 
         display_messages.refresh()
 
@@ -245,7 +236,7 @@ async def recieve_messages(data, address, transport):
     if decode_data_meta.count("m") == 1:
         dcData = decrypt_AES_GCM(decode_data_content, skey)
         #debug
-        print(dcData)
+        #print(dcData)
         securemode = False
         Mmeta, Mdata = dcData.decode().split(':',1)
         if '$' in Mmeta:
@@ -273,8 +264,6 @@ async def recieve_messages(data, address, transport):
 
 async def update_local_messages():    
     global messages, smessages
-    #manage chat messages here
-    #check test.py for heapq algorithm
 
     return list(merge(messages, smessages, key=lambda x:x[0]))
     
@@ -298,10 +287,14 @@ def auth_page():
                             password_toggle_button= True,
                             placeholder = 'enter your password'
             ).classes('w-3/4 mx-auto')
-
             ui.button('Submit',
                     on_click=lambda: submit_auth(uinput, pinput)
             ).classes('w-3/4 mx-auto')
+            ui.button('Register',
+                    on_click=lambda: submit_register(uinput, pinput)
+            ).classes('w-3/4 mx-auto')
+
+
         with splitter.after:
             sip_input = ui.input(label = "Server IP",
                                  placeholder="Leave blank for default ~w~"
@@ -317,7 +310,8 @@ def auth_page():
 async def display_messages():
     #call update_local_messages and await it to get the content to display
     displayData = await update_local_messages()
-    print('\n','recieved messages')
+    #debug
+    #print('\n','recieved messages')
 
     #Message Tuple (find, author, content, timestamp)
     with ui.scroll_area().classes('w-full h-full') as textDisplayer:
@@ -330,6 +324,15 @@ async def display_messages():
             )
         textDisplayer.scroll_to(percent=1.5)
         
+async def submit_register(user, password):
+    username = user.value.strip()
+    uPass = password.value.strip()
+
+    uSend = username+'|'+uid_hash(username, uPass)
+    uSend = encrypt_AES_GCM(uSend, skey)
+    uSend = "ŸŸŸŸŸŸ:"+uSend
+
+    transport.sendto(uSend.encode())
 
 async def sendMessage(content, secureStatus, bn, tarea):
     bn.disable()
@@ -342,7 +345,6 @@ async def sendMessage(content, secureStatus, bn, tarea):
         scontent = encrypt_AES_GCM(content, skey)
         scontent = "ŸŸ:"+scontent
 
-    print(scontent)
     transport.sendto(scontent.encode())
     tarea.value = ''
     await asyncio.sleep(.5)

@@ -74,9 +74,6 @@ async def start_aiosqlite():
     await tcsr.close()
     await stcsr.close()
 
-    #await stcsr.execute('select * from s_messages')
-    #z = await stcsr.fetchall()
-    #print('mem val', z)
 
 #i did the thing, finally
 
@@ -121,10 +118,10 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
 
 
 IP = "127.0.0.1" 
+#port can be modified
 PORT = 2700
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#sock.bind((IP, PORT))
 
 print(f"Listening for clients at {(IP, PORT)}")
 
@@ -135,28 +132,12 @@ decode_data = None
 
 current_message_indexes = None
 
-#msg_pipeline = []
-'''
-async def addMsg():
-    global conn, cursor
-    global msg_pipeline
-    
-    while True:
-        #make smaller for servers with more chatters
-        await asyncio.sleep(.1) #time between each processed message
 
-        if any(msg_pipeline):
-            cindex, cauthor, ccontent, ctime = msg_pipeline[0]
-            cursor.execute(f"INSERT INTO messages (FIND, AUTHOR, CONTENT, TIMESTAMP) VALUES ({cindex}, '{cauthor}', '{ccontent}', '{ctime}')")
-            conn.commit()
-            msg_pipeline = msg_pipeline [1:]
-'''
-#asyncio.run(addMsg())
 write_lock = asyncio.Lock()
+register_dataframe_lock = asyncio.Lock()
 
 async def handle_message(data, address, conn, transport, S_conn):
     # conn and transport are passed explicitly
-    print('test2')
     usingcursor = False
     usingscursor = False
 
@@ -167,7 +148,6 @@ async def handle_message(data, address, conn, transport, S_conn):
 
 
     decode_data = data.decode(errors='ignore')
-    #print(data, decode_data, cleaned_data, sep='\n')
 
     if address not in user_keyList.keys():
         user_keyList[address] = ""
@@ -182,13 +162,9 @@ async def handle_message(data, address, conn, transport, S_conn):
 
     match decode_data_meta.count("Ÿ"):
         case 1: #get AES key
-            print('test3')
+            print('authenticating a client')
             charset = string.ascii_letters + string.digits + string.punctuation
             temp_skey = secrets.token_urlsafe(32)[:32]
-            #temp_skey = os.urandom(32)
-
-            #DEBUG
-            #print(temp_skey)
 
             user_keyList[address] = temp_skey
             temp_ekey = rsa_encrypt(temp_skey, RSA.import_key(decode_data_content))
@@ -200,7 +176,7 @@ async def handle_message(data, address, conn, transport, S_conn):
                 print("i smell a modified client","\nRico: Kaboom...?")
                 return
 
-            print('got message')
+
             temp_msg = decrypt_AES_GCM(decode_data_content, user_keyList[address].encode())
             temp_msg = temp_msg.decode()
             
@@ -225,15 +201,12 @@ async def handle_message(data, address, conn, transport, S_conn):
                 except Exception as e:
                     print("SQL PROBLEM!!", e)
                 
-                print("SECURE message recieved", cauthor)
+                #print("SECURE message recieved", cauthor)
         
             else:
                 cursor = await conn.cursor()
                 usingcursor = True     
 
-                #await cursor.execute(f"SELECT * FROM messages ORDER BY FIND DESC LIMIT 1")
-                #i dont know if it will suffer from data races if i replace this with the global vairable...
-                #cindex = await cursor.fetchone()
 
                 cauthor = user_authorList[address]
                 ccontent = temp_msg.strip()
@@ -249,7 +222,7 @@ async def handle_message(data, address, conn, transport, S_conn):
                 except Exception as e:
                     print("SQL PROBLEM!!",e)
 
-                print("message recieved", cauthor)
+                #print("message recieved", cauthor)
 
             #once again, theres a better way to do this isnt there
             cMG = str(len(cauthor))+'-' + str(ctime)+'-'+str(cindex)+':'+cauthor+ccontent
@@ -287,11 +260,11 @@ async def handle_message(data, address, conn, transport, S_conn):
 
             cursor = await conn.cursor()
             usingcursor = True
+
             bufsize = 50
 
             await cursor.execute('SELECT * FROM messages WHERE FIND > ?', (current_message_indexes[0]-bufsize,))
             msgsContent = await cursor.fetchall()
-            #print(msgsContent)
             #order by timestamp, send only bufsize (50 ig) messages using between
 
             jBytes = json.dumps(msgsContent).encode('utf-8')
@@ -299,8 +272,6 @@ async def handle_message(data, address, conn, transport, S_conn):
             msgList = encrypt_AES_GCM(enc_b64, user_keyList[address].encode())
             msgList = 'p:'+msgList
 
-            #msgDict = encrypt_AES_GCM("Placeholder MSGDICT", user_keyList[address].encode())
-            #msgDict = "p:"+msgDict
 
             transport.sendto(msgList.encode(), address)
 
@@ -308,8 +279,36 @@ async def handle_message(data, address, conn, transport, S_conn):
             print(f"client {address}, pinged")
 
             transport.sendto("n:Ping Recieved".encode(), address)
-            
 
+        case 6: #adding new users
+            uCredContent = decrypt_AES_GCM(decode_data_content, user_keyList[address].encode()).decode()
+            if uCredContent.count('|')>1:
+                print('invalid registration username')
+                return
+            
+            currentUsers = pandas.read_csv('users.csv')
+            currentRegUsers = pandas.read_csv('users_adder.csv')
+
+            rUser, rPass = uCredContent.split('|')
+            
+            if rUser in currentUsers['userid'].tolist():
+                print(f"User {rUser} already exists! Registration cancelled")
+                return
+            if rUser in currentRegUsers['userid'].tolist():
+                print(f'User in registration queue attempted re-registering')
+                return
+
+            if rUser.replace('-','').replace('_','').isalnum() and rPass.isalnum():
+                tDf = {'userid':[rUser], 'password':[rPass]}
+                aDf = pandas.DataFrame(tDf)
+
+                try:
+                    async with register_dataframe_lock:
+                        aDf.to_csv('users_adder.csv', mode='a', index=False, header=False)
+                    print('a user wants to register!')
+
+                except Exception as e:
+                    print(f"user registration error csv {e}!")
 
     if usingcursor:
         await cursor.close()
@@ -318,7 +317,6 @@ async def handle_message(data, address, conn, transport, S_conn):
 
 class UDP_Protocol(asyncio.DatagramProtocol):
     def __init__(self, on_datagram, conn, S_conn):
-        # on_datagram should be a coroutine accepting (data, address, conn, transport)
         self.on_datagram = on_datagram
         self.conn = conn
         self.S_conn = S_conn
@@ -328,9 +326,9 @@ class UDP_Protocol(asyncio.DatagramProtocol):
         self.transport = transport
 
     def datagram_received(self, data, address):
-        """Called automatically when a UDP packet is received."""
+        #Called automatically when a UDP packet is received.
         message = data.decode()
-        print(f"Received {message!r} from {address}")
+        #print(f"Received {message!r} from {address}")
         
         # Run the callback asynchronously, passing the shared connection and transport
         asyncio.create_task(self.on_datagram(data, address, self.conn, self.transport, self.S_conn))
@@ -339,12 +337,12 @@ async def main():
     await start_aiosqlite()
     loop = asyncio.get_running_loop()
 
-    # create a protocol instance that closes over the sqlite connection
+    # create a protocol instance that closes over the sqlite connections
     transport, protocol = await loop.create_datagram_endpoint(
         lambda: UDP_Protocol(handle_message, conn, S_conn),
-        local_addr=('0.0.0.0', 2700)
+        local_addr=('0.0.0.0', PORT)
     )
-    print("New Server Running on 0.0.0.0:2700")
+    print(f"New Server Running on 0.0.0.0:{PORT}")
 
     try:
         #await asyncio.sleep(3600)
@@ -352,11 +350,4 @@ async def main():
     finally:
         transport.close()
 
-    '''
-    while True:
-        print('test')
-        data, address = sock.recvfrom(4096)
-        asyncio.create_task(handle_message(data, address, conn1))
-
-        '''
 asyncio.run(main())

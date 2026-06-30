@@ -1,4 +1,5 @@
 users.csv
+users_adder.csv
 messages.csv
 messages.db
 test.py
