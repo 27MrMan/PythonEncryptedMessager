@@ -48,11 +48,11 @@ def decrypt_AES_GCM(encryptedMsg, secretKey):
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 2700
-#SERVER_IP = '147.185.221.31'
-#SERVER_PORT = 46163
+
 
 
 transport = None
+recieverTASK = None
 
 #obtaining the aes256 key#
 skey = None
@@ -365,18 +365,57 @@ async def main_page():
                     user_TextInput = ui.textarea(label='Enter Message')
                     secureSwitch = ui.switch("Secure Message", value=False)
                     sendbutton = ui.button('Send', icon='send', on_click=lambda btn: sendMessage(user_TextInput.value, secureSwitch.value, btn.sender, user_TextInput))
-                    killbutton = ui.button('KILL')
+                    killbutton = ui.button('KILL', on_click=lambda: killswitch())
 
                     user_TextInput.on('keydown.enter', lambda: sendMessage(user_TextInput.value, secureSwitch.value, sendbutton, user_TextInput))
 
 
+async def cleanup_runtime_state():
+    global messages, smessages, authKey, skey, authenticating, user_validated, transport, keyWait
+    global username, password, loadin, stop_tasks, server_addr, recieverTASK
 
-async def debug1():
-    x=1
-    while x<500:
-        x+=1
-        print(x)
-        await asyncio.sleep(1)
+    messages = []
+    smessages = []
+
+    authKey = None
+    skey = None
+    authenticating = False
+    user_validated = False
+    username = None
+    password = None
+    loadin = False
+    stop_tasks = True
+    server_addr = None
+
+    if keyWait is not None:
+        keyWait.clear()
+
+    if recieverTASK and not recieverTASK.done():
+        recieverTASK.cancel()
+
+    if transport is not None:
+        try:
+            transport.close()
+        except Exception:
+            pass
+        transport = None
+
+async def killswitch():
+    global messages, smessages, transport
+    messages, smessages = [], []
+
+    try:
+        display_messages.refresh()
+        await asyncio.sleep(.1)
+        #another data race...?
+    except Exception:
+        pass
+
+    transport.sendto('ŸŸŸŸŸŸŸ:killswitch'.encode())
+
+    await cleanup_runtime_state()
+    raise SystemExit(0)
+
 
 async def UDP_Reciever():
     global SERVER_IP, SERVER_PORT, sock, transport
@@ -405,12 +444,7 @@ async def UDP_Reciever():
 
 
 async def on_shutdown():
-    global smessages, skey
-    smessages, skey = None, None
-    global stop_tasks, recieverTASK
-    stop_tasks = True
-    if recieverTASK and not recieverTASK.done():
-        recieverTASK.cancel()
+    await cleanup_runtime_state()
 
 app.on_shutdown(on_shutdown)
 
@@ -419,4 +453,4 @@ async def on_startup():
     global recieverTASK
     recieverTASK = asyncio.create_task(UDP_Reciever())
 
-ui.run(dark = True)
+ui.run(dark = True, reload=False)

@@ -310,6 +310,10 @@ async def handle_message(data, address, conn, transport, S_conn):
                 except Exception as e:
                     print(f"user registration error csv {e}!")
 
+        case 7:
+            print(f'user {user_authorList[address]} at {address} has hit the killswitch!')
+            del user_authorList[address]
+
     if usingcursor:
         await cursor.close()
     if usingscursor:
