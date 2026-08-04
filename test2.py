@@ -65,6 +65,8 @@ keyWait.clear()
 
 server_addr = None
 
+msg_bufSize = 50
+
 async def resolve_server_addr():
     global SERVER_IP, SERVER_PORT
     if 'gl' in SERVER_IP:
@@ -242,7 +244,7 @@ async def recieve_messages(data, address, transport):
         Mmeta, Mdata = dcData.decode().split(':',1)
         if '$' in Mmeta:
             securemode = True
-            Mmeta.replace("$", '')
+            Mmeta = Mmeta.replace("$", '')
 
         cALen, cTime, cFind = Mmeta.split('-')
         cALen = int(cALen)
@@ -266,7 +268,7 @@ async def recieve_messages(data, address, transport):
 async def update_local_messages():    
     global messages, smessages
 
-    return list(merge(messages, smessages, key=lambda x:x[-1]))[:50]
+    return list(merge(messages, smessages, key=lambda x:x[-1]))[msg_bufSize*-1:]
     
     
 
@@ -309,22 +311,45 @@ def auth_page():
 
 @ui.refreshable
 async def display_messages():
-    global utc_offset
+    global utc_offset, msg_bufSize
     #call update_local_messages and await it to get the content to display
     displayData = await update_local_messages()
     #debug
+    dispLen = len(displayData)
     #print('\n','recieved messages')
 
     #Message Tuple (find, author, content, timestamp)
+    mDisp = []
     with ui.scroll_area().classes('w-full h-full') as textDisplayer:
-        for msg in displayData:
+        for i in range(dispLen):
+            msg = displayData[i]
+
+            if i<dispLen-1:
+                if msg[1]==displayData[i+1][1]:
+                    mDisp.append(msg[2])
+
+                    textDisplayer.scroll_to(percent=1e6)
+                    continue
+
+            if len(mDisp) > 0 or (i==dispLen-1 and len(mDisp) > 0):
+                ui.chat_message(
+                    text=mDisp+[msg[2]],
+                    name=msg[1],
+                    stamp=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(float(msg[3])-utc_offset))
+                )
+                mDisp = []
+
+                textDisplayer.scroll_to(percent=1e6)
+                continue
+
 
             ui.chat_message(
                 text=msg[2],
                 name=msg[1],
                 stamp=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(float(msg[3])-utc_offset))
             ) #timezone-based time conversion :D ^^^
-        textDisplayer.scroll_to(percent=1.5)
+            
+        textDisplayer.scroll_to(percent=1e6)
         
 async def submit_register(user, password):
     username = user.value.strip()
@@ -362,6 +387,7 @@ async def main_page():
         with splitter.after:
             with ui.grid(rows='17fr 3fr').classes('h-full w-full'):
                 await display_messages()
+                display_messages.refresh()
 
                 with ui.row().classes('w-full'):
                     user_TextInput = ui.textarea(label='Enter Message')

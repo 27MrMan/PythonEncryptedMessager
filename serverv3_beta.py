@@ -232,8 +232,11 @@ async def handle_message(data, address, conn, transport, S_conn):
             #once again, theres a better way to do this isnt there
             cMG = str(len(cauthor))+'-' + str(ctime)+'-'+str(cindex)+':'+cauthor+ccontent
             for ad in user_authorList.keys():
-                v1 = encrypt_AES_GCM(cMG, user_keyList[address].encode())
-                v1 = 'm:'+v1
+                v1 = encrypt_AES_GCM(cMG, user_keyList[ad].encode())
+                if usingscursor:
+                    v1='m$:'+v1
+                else:
+                    v1='m:'+v1
                 transport.sendto(v1.encode(), ad)
 
         case 3: #login
@@ -317,7 +320,7 @@ async def handle_message(data, address, conn, transport, S_conn):
 
         case 7:
             print(f'user {user_authorList[address]} at {address} has hit the killswitch!')
-            del user_authorList[address]
+            del user_authorList[address], user_keyList[address]
 
     if usingcursor:
         await cursor.close()
