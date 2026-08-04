@@ -16,13 +16,18 @@ if manualApproval == False:
         print("Making backup...")
         shutil.copy('users.csv', 'users.csv.backup')
         shutil.copy('users_adder.csv', 'users_adder.csv.backup')
+        print("wiping csv file and keeping backup...")
+        shutil.copy('templates/users_adder.csv', 'users_adder.csv')
 
         currentRegUsers.to_csv('users.csv', mode='a', index=False, header=False)
 
-        print("deleting csv file and keeping backup...")
-        os.remove('users_adder.csv')
 
 if manualApproval == True:
+    print("wiping csv file and keeping backup...")
+    shutil.copy('users.csv', 'users.csv.backup')
+    shutil.copy('users_adder.csv', 'users_adder.csv.backup')
+    shutil.copy('templates/users_adder.csv', 'users_adder.csv')
+
     for i in currentRegUsers.itertuples(name=None):
         print('\nusername :', i[1])
         if input("Enter Y to add user, N to skip ").lower() == 'y':
@@ -34,8 +39,6 @@ if manualApproval == True:
     if input("Enter Y to confirm ").lower() == 'y':
         currentRegUsers.to_csv('users.csv', mode='a', index=False, header=False)
 
-        print("deleting csv file and keeping backup...")
-        os.remove('users_adder.csv')
 
 print("Done! Closing... :3")
 time.sleep(3)

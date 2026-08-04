@@ -1,6 +1,6 @@
 import socket
 import pandas
-import sys, os
+import sys, os, shutil
 import datetime
 import asyncio
 
@@ -73,6 +73,11 @@ async def start_aiosqlite():
 
     await tcsr.close()
     await stcsr.close()
+
+    if not(os.path.exists('users.csv')):
+        shutil.copy('templates/users.csv', 'users.csv')
+    if not(os.path.exists('users_adder.csv')):
+        shutil.copy('templates/users_adder.csv', 'users_adder.csv')
 
 
 #i did the thing, finally

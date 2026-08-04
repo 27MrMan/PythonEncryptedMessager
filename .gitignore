@@ -5,3 +5,4 @@ messages.db
 test.py
 *.sqbpro
 *.backup
+!templates/*
