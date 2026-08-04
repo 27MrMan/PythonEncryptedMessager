@@ -226,7 +226,7 @@ async def recieve_messages(data, address, transport):
         msgList = json.loads(dJson)
 
 
-        messages.extend(msgList)
+        messages = msgList
 
         display_messages.refresh()
 
@@ -265,7 +265,7 @@ async def recieve_messages(data, address, transport):
 async def update_local_messages():    
     global messages, smessages
 
-    return list(merge(messages, smessages, key=lambda x:x[0]))
+    return list(merge(messages, smessages, key=lambda x:x[-1]))[:50]
     
     
 
