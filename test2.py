@@ -134,6 +134,7 @@ stop_tasks = False
 user_input = ''
 pass_input = ''
 sip1,spt1 = '',''
+utc_offset = time.altzone if time.daylight else time.timezone
 
 class UDP_Protocol(asyncio.DatagramProtocol):
     global authenticating, authKey, keyWait
@@ -308,6 +309,7 @@ def auth_page():
 
 @ui.refreshable
 async def display_messages():
+    global utc_offset
     #call update_local_messages and await it to get the content to display
     displayData = await update_local_messages()
     #debug
@@ -320,8 +322,8 @@ async def display_messages():
             ui.chat_message(
                 text=msg[2],
                 name=msg[1],
-                stamp=msg[3]
-            )
+                stamp=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(float(msg[3])-utc_offset))
+            ) #timezone-based time conversion :D ^^^
         textDisplayer.scroll_to(percent=1.5)
         
 async def submit_register(user, password):

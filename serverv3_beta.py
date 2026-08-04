@@ -295,7 +295,7 @@ async def handle_message(data, address, conn, transport, S_conn):
                 print(f"User {rUser} already exists! Registration cancelled")
                 return
             if rUser in currentRegUsers['userid'].tolist():
-                print(f'User in registration queue attempted re-registering')
+                print(f'User {rUser} in registration queue attempted re-registering')
                 return
 
             if rUser.replace('-','').replace('_','').isalnum() and rPass.isalnum():
@@ -305,7 +305,7 @@ async def handle_message(data, address, conn, transport, S_conn):
                 try:
                     async with register_dataframe_lock:
                         aDf.to_csv('users_adder.csv', mode='a', index=False, header=False)
-                    print('a user wants to register!')
+                    print('a user wants to register! run user_adder.py sometime')
 
                 except Exception as e:
                     print(f"user registration error csv {e}!")
